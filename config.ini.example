@@ -1,0 +1,31 @@
+[zabbix]
+server = http://seu-servidor-zabbix/api_jsonrpc.php
+user = seu_usuario
+password = sua_senha
+timeout = 10
+
+[snmp]
+community = public
+version = 2c
+timeout = 2
+retries = 3
+
+[monitor]
+interval = 300
+log_level = INFO
+log_file = snmp_monitor.log
+
+[alerts]
+email_enabled = false
+email_from = alerts@exemplo.com
+email_to = admin@exemplo.com
+email_subject = [ALERTA] Dispositivos SNMP Offline
+smtp_server = smtp.exemplo.com
+smtp_port = 587
+smtp_user = usuario_smtp
+smtp_password = senha_smtp
+smtp_tls = true
+
+[reporting]
+report_dir = reports
+template_dir = templates/reports
