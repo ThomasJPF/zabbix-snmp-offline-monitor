@@ -185,28 +185,43 @@ def check_ping_status(host, config):
 def send_item_value(zapi, itemid, value, error_msg=""):
     """Envia valor para um item no Zabbix de maneira compatível com diferentes versões"""
     try:
+        # Captura o timestamp atual para enviar junto com o valor
+        clock = int(time.time())
+        
         # Tenta método item.create_values (Zabbix 7+)
         try:
             result = zapi.do_request('item.create_values', {
                 'items': [{
                     'itemid': itemid,
-                    'value': value
+                    'value': value,
+                    'clock': clock
                 }]
             })
-            logging.debug(f"Valor enviado para item {itemid} usando item.create_values")
+            logging.debug(f"Valor '{value}' enviado para item {itemid} usando item.create_values")
             return True
         except Exception as e:
-            # Se falhar, tenta método alternativo
+            # Se falhar, tenta método history.add (versões anteriores do Zabbix)
             if "Method not found" in str(e):
-                logging.debug(f"Método item.create_values não encontrado, tentando método alternativo")
-                # Tenta usar item.update (algumas versões suportam)
-                zapi.item.update(
-                    itemid=itemid,
-                    value=value,
-                    lastvalue=value
-                )
-                logging.debug(f"Valor enviado para item {itemid} usando item.update")
-                return True
+                logging.debug(f"Método item.create_values não encontrado, tentando history.add")
+                try:
+                    result = zapi.do_request('history.add', [{
+                        'itemid': itemid,
+                        'value': value,
+                        'clock': clock
+                    }])
+                    logging.debug(f"Valor '{value}' enviado para item {itemid} usando history.add")
+                    return True
+                except Exception as e2:
+                    if "Method not found" in str(e2):
+                        logging.debug(f"Método history.add não encontrado, tentando item.update como último recurso")
+                        # Tenta usar item.update como último recurso (algumas versões suportam)
+                        zapi.item.update(
+                            itemid=itemid,
+                            lastvalue=value
+                        )
+                        logging.debug(f"Valor '{value}' enviado para item {itemid} usando item.update")
+                        return True
+                    raise e2
             raise e  # Re-lança a exceção se não for um erro de "método não encontrado"
     except Exception as e:
         logging.error(f"Erro ao enviar valor para item {itemid}: {e}")

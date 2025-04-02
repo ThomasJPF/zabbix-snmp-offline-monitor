@@ -1,5 +1,8 @@
 # Dependências para o Zabbix SNMP Offline Monitor
 pyzabbix>=1.2.0
-pysnmp>=4.4.12
+pysnmp==4.4.12
+pyasn1==0.4.8
+pyasn1-modules==0.2.8
+pysmi==0.3.4
 requests>=2.25.0
 configparser>=5.0.0
