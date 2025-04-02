@@ -3,6 +3,7 @@
 """
 Script principal para monitoramento de dispositivos SNMP no Zabbix.
 Detecta e registra dispositivos que não estão respondendo às requisições SNMP.
+Compatível com Zabbix 7.0+
 """
 
 import os
@@ -66,6 +67,10 @@ def connect_zabbix(config):
             zapi.login(zabbix_user, zabbix_password)
             logging.info("Autenticado no Zabbix API usando usuário e senha")
             
+        # Verifica a versão do Zabbix para compatibilidade
+        api_version = zapi.api_version()
+        logging.info(f"Conectado ao Zabbix API v{api_version}")
+        
         return zapi
     except Exception as e:
         logging.error(f"Erro ao conectar ao Zabbix API: {e}")
@@ -176,6 +181,37 @@ def check_ping_status(host, config):
         logging.error(f"Erro ao verificar status PING do host {host['host']} ({ip}): {e}")
         return False
 
+# Função para enviar valores para itens no Zabbix 7+
+def send_item_value(zapi, itemid, value, error_msg=""):
+    """Envia valor para um item no Zabbix de maneira compatível com diferentes versões"""
+    try:
+        # Tenta método item.create_values (Zabbix 7+)
+        try:
+            result = zapi.do_request('item.create_values', {
+                'items': [{
+                    'itemid': itemid,
+                    'value': value
+                }]
+            })
+            logging.debug(f"Valor enviado para item {itemid} usando item.create_values")
+            return True
+        except Exception as e:
+            # Se falhar, tenta método alternativo
+            if "Method not found" in str(e):
+                logging.debug(f"Método item.create_values não encontrado, tentando método alternativo")
+                # Tenta usar item.update (algumas versões suportam)
+                zapi.item.update(
+                    itemid=itemid,
+                    value=value,
+                    lastvalue=value
+                )
+                logging.debug(f"Valor enviado para item {itemid} usando item.update")
+                return True
+            raise e  # Re-lança a exceção se não for um erro de "método não encontrado"
+    except Exception as e:
+        logging.error(f"Erro ao enviar valor para item {itemid}: {e}")
+        return False
+
 # Atualiza o status SNMP no Zabbix
 def update_host_snmp_status(zapi, host, status, error_msg=""):
     """Atualiza o valor do item de status SNMP no Zabbix"""
@@ -195,13 +231,9 @@ def update_host_snmp_status(zapi, host, status, error_msg=""):
                 status=0  # Ativo
             )
             
-            # Envia o valor para o item
-            zapi.history.add({
-                "itemid": items[0]["itemid"],
-                "clock": int(time.time()),
-                "value": "1" if status else "0",
-                "ns": 0
-            })
+            # Envia o valor para o item usando método compatível com Zabbix 7+
+            value = "1" if status else "0"
+            send_item_value(zapi, items[0]["itemid"], value)
             
             # Atualiza a mensagem de erro se disponível
             if not status and error_msg:
@@ -233,13 +265,9 @@ def update_host_snmp_status(zapi, host, status, error_msg=""):
             )
             
             if items:
-                # Envia o valor para o item
-                zapi.history.add({
-                    "itemid": items[0]["itemid"],
-                    "clock": int(time.time()),
-                    "value": "1" if status else "0",
-                    "ns": 0
-                })
+                # Envia o valor para o item usando método compatível com Zabbix 7+
+                value = "1" if status else "0"
+                send_item_value(zapi, items[0]["itemid"], value)
                 
                 # Atualiza a mensagem de erro se disponível
                 if not status and error_msg:
@@ -263,7 +291,6 @@ def main():
     # Conecta ao Zabbix
     logger.info("Iniciando monitoramento SNMP...")
     zapi = connect_zabbix(config)
-    logger.info(f"Conectado ao Zabbix API v{zapi.api_version()}")
     
     interval = config.getint('monitor', 'interval', fallback=300)
     
