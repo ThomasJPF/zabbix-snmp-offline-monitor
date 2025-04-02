@@ -50,13 +50,22 @@ def connect_zabbix(config):
     """Estabelece conexão com a API do Zabbix"""
     try:
         zabbix_url = config.get('zabbix', 'server')
-        zabbix_user = config.get('zabbix', 'user')
-        zabbix_password = config.get('zabbix', 'password')
         timeout = config.getint('zabbix', 'timeout', fallback=10)
         
         zapi = ZabbixAPI(zabbix_url)
         zapi.timeout = timeout
-        zapi.login(zabbix_user, zabbix_password)
+        
+        # Verifica se usa token ou usuário/senha
+        if config.has_option('zabbix', 'token'):
+            token = config.get('zabbix', 'token')
+            zapi.login(api_token=token)
+            logging.info("Autenticado no Zabbix API usando token")
+        else:
+            zabbix_user = config.get('zabbix', 'user')
+            zabbix_password = config.get('zabbix', 'password')
+            zapi.login(zabbix_user, zabbix_password)
+            logging.info("Autenticado no Zabbix API usando usuário e senha")
+            
         return zapi
     except Exception as e:
         logging.error(f"Erro ao conectar ao Zabbix API: {e}")
@@ -70,6 +79,7 @@ def get_snmp_hosts(zapi):
         hosts = zapi.host.get(
             output=["hostid", "host", "name", "status"],
             selectInterfaces=["interfaceid", "ip", "type", "main", "port"],
+            selectMacros=["macro", "value"],  # Busca também as macros do host
             filter={"status": 0}  # Somente hosts ativos
         )
         
@@ -79,6 +89,14 @@ def get_snmp_hosts(zapi):
             for interface in host["interfaces"]:
                 if interface["type"] == "2":  # Tipo 2 é SNMP
                     host["snmp_interface"] = interface
+                    
+                    # Procura por macro {$SNMP_COMMUNITY}
+                    host["snmp_community"] = None
+                    for macro in host["macros"]:
+                        if macro["macro"] == "{$SNMP_COMMUNITY}":
+                            host["snmp_community"] = macro["value"]
+                            break
+                    
                     snmp_hosts.append(host)
                     break
         
@@ -91,13 +109,17 @@ def get_snmp_hosts(zapi):
 def check_snmp_status(host, config):
     """Verifica se um host responde a consultas SNMP"""
     try:
-        community = config.get('snmp', 'community', fallback='public')
+        # Obtém a community string da macro do host, ou usa o valor padrão
+        community = host.get("snmp_community") or config.get('snmp', 'default_community', fallback='public')
+        
         version = config.get('snmp', 'version', fallback='2c')
         timeout = config.getint('snmp', 'timeout', fallback=2)
         retries = config.getint('snmp', 'retries', fallback=3)
         
         ip = host["snmp_interface"]["ip"]
         port = int(host["snmp_interface"]["port"]) if host["snmp_interface"]["port"] else 161
+        
+        logging.debug(f"Verificando SNMP no host {host['host']} ({ip}) com community: {'*' * len(community)}")
         
         # Verifica se o dispositivo responde ao OID sysDescr
         error_indication, error_status, error_index, var_binds = next(
@@ -270,10 +292,17 @@ def main():
                 update_host_snmp_status(zapi, host, snmp_ok, error_msg)
                 
                 if not snmp_ok:
+                    community_info = ""
+                    if host.get("snmp_community"):
+                        community_info = " (Usando macro {$SNMP_COMMUNITY})"
+                    else:
+                        community_info = " (Usando community padrão)"
+                    
                     offline_hosts.append({
                         'host': host,
                         'ping_ok': ping_ok,
-                        'error': error_msg
+                        'error': error_msg,
+                        'community_info': community_info
                     })
             
             # Registra resultados
@@ -283,7 +312,7 @@ def main():
                 for item in offline_hosts:
                     host = item['host']
                     ping_status = "Responde a ping" if item['ping_ok'] else "Não responde a ping"
-                    logger.info(f"  - {host['name']} ({host['snmp_interface']['ip']}): {ping_status}, Erro: {item['error']}")
+                    logger.info(f"  - {host['name']} ({host['snmp_interface']['ip']}): {ping_status}, Erro: {item['error']}{item['community_info']}")
             
             # Calcula tempo para próxima execução
             execution_time = time.time() - start_time

@@ -1,13 +1,19 @@
 [zabbix]
 # Configuração de acesso ao Zabbix API
 server = http://seu-servidor-zabbix/zabbix
+# Autenticação por usuário/senha (método tradicional)
 user = seu_usuario_zabbix
 password = sua_senha_zabbix
+# OU Autenticação por token (recomendado para Zabbix 7+)
+# Comentar user/password e descomentar token se quiser usar tokens
+# token = seu_token_api_zabbix
 timeout = 10
 
 [snmp]
-# Configuração SNMP
-community = public
+# Configuração SNMP - valores padrão caso o host não tenha macro definida
+# A macro {$SNMP_COMMUNITY} do host será usada quando disponível
+default_community = public
+# Versão SNMP padrão (1, 2c ou 3)
 version = 2c
 timeout = 2
 retries = 3

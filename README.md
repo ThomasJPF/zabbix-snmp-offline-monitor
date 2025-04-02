@@ -5,6 +5,8 @@ Este é um módulo completo para monitoramento de dispositivos SNMP no Zabbix 7.
 ## Características
 
 - Script Python que verifica dispositivos SNMP e atualiza seu status no Zabbix
+- Suporte a macros {$SNMP_COMMUNITY} definidas nos hosts do Zabbix
+- Autenticação por token API ou usuário/senha do Zabbix
 - Módulo PHP para o frontend do Zabbix com:
   - Dashboard interativa com gráficos e estatísticas
   - Widgets para uso em dashboards personalizados
@@ -101,6 +103,49 @@ chown -R $WEB_USER:$WEB_USER $ZABBIX_MODULES_DIR/SNMPMonitor/
 2. Vá para **Administração → Geral → Módulos**
 3. Clique em **Scan directory**
 4. Encontre o módulo "SNMP Monitor" e clique em **Enable**
+
+## Community Strings SNMP e Autenticação por Token
+
+### Configuração de Community Strings SNMP por host
+
+Este módulo suporta o uso de community strings diferentes para cada host do Zabbix:
+
+1. Para definir a community string para um host específico:
+   - Vá para a configuração do host no Zabbix
+   - Na aba "Macros", adicione uma macro `{$SNMP_COMMUNITY}` com o valor da community string
+   - Por exemplo: `{$SNMP_COMMUNITY}` = `minhaSecretCommunity`
+
+2. O script irá:
+   - Automaticamente detectar e usar a macro `{$SNMP_COMMUNITY}` de cada host
+   - Usar a community string padrão do config.ini apenas quando a macro não estiver definida
+   - Registrar nos logs qual método foi usado para cada host
+
+3. Dica de segurança:
+   - Configure o tipo da macro como "Texto secreto" para que o valor não seja visível na interface do Zabbix
+
+### Autenticação por Token API (Zabbix 7+)
+
+Para usar tokens API em vez de usuário/senha:
+
+1. Crie um token API no Zabbix:
+   - Vá para **Administração → Usuários**
+   - Selecione o usuário e acesse a aba "Tokens de API"
+   - Crie um novo token com permissões adequadas 
+   - Copie o valor do token
+
+2. Configure o arquivo `config.ini`:
+   - Comente as linhas `user` e `password`
+   - Descomente a linha `token` e defina o valor do token
+
+Exemplo:
+```ini
+[zabbix]
+server = http://seu-servidor-zabbix/zabbix
+# user = seu_usuario_zabbix
+# password = sua_senha_zabbix
+token = seu_token_api_zabbix
+timeout = 10
+```
 
 ## Configuração Segura (Importante)
 
