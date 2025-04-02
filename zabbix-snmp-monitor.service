@@ -1,0 +1,14 @@
+[Unit]
+Description=Zabbix SNMP Offline Monitoring Service
+After=network.target zabbix-server.service
+
+[Service]
+Type=simple
+User=zabbix
+ExecStart=/usr/bin/python3 /usr/lib/zabbix/externalscripts/snmp_monitor.py
+WorkingDirectory=/usr/lib/zabbix/externalscripts
+Restart=on-failure
+RestartSec=60s
+
+[Install]
+WantedBy=multi-user.target 

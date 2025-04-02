@@ -1,0 +1,11 @@
+{
+    "manifest_version": 2.0,
+    "id": "snmpmonitor",
+    "type": "widget",
+    "name": "SNMP Offline Devices",
+    "namespace": "SNMPMonitor",
+    "version": "1.0",
+    "author": "Zabbix",
+    "description": "Lista de dispositivos com falha de comunicação SNMP",
+    "url": "zabbix.php?action=dashboard.view"
+} 

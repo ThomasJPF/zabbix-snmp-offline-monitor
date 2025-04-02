@@ -1,16 +1,24 @@
 [zabbix]
-server = http://seu-servidor-zabbix/api_jsonrpc.php
-user = seu_usuario
-password = sua_senha
+# Configuração de acesso ao Zabbix API
+server = http://seu-servidor-zabbix/zabbix
+user = seu_usuario_zabbix
+password = sua_senha_zabbix
 timeout = 10
 
 [snmp]
+# Configuração SNMP
 community = public
 version = 2c
 timeout = 2
 retries = 3
 
+[ping]
+# Configuração de teste de ping
+count = 3
+timeout = 2
+
 [monitor]
+# Configuração do monitoramento
 interval = 300
 log_level = INFO
 log_file = snmp_monitor.log

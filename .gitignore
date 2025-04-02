@@ -1,0 +1,31 @@
+# Arquivos de configuração com credenciais
+config.ini
+
+# Logs e arquivos temporários
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+*.pyc
+*.pyo
+__pycache__/
+
+# Ambiente virtual Python
+venv/
+env/
+.env/
+
+# Arquivos de IDE/editores
+.idea/
+.vscode/
+*.sublime-*
+.DS_Store
+
+# Arquivos de relatório
+reports/
+*.xlsx
+*.csv
+
+# Outros
+*.pid 

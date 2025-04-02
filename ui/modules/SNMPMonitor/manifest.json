@@ -1,0 +1,19 @@
+{
+    "manifest_version": 2.0,
+    "id": "snmp-monitor",
+    "name": "SNMP Monitor",
+    "version": "1.0",
+    "namespace": "SNMPMonitor",
+    "description": "Monitoramento de dispositivos SNMP com detecção de falhas e teste de ping",
+    "author": "Zabbix",
+    "actions": {
+        "snmp.monitor": {
+            "class": "SNMPMonitor",
+            "view": "snmp.monitor"
+        },
+        "snmp.monitor.download": {
+            "class": "SNMPMonitorDownload",
+            "view": "snmp.monitor.download"
+        }
+    }
+} 

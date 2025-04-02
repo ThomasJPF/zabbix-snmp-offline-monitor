@@ -10,6 +10,8 @@ import sys
 import time
 import logging
 import configparser
+import subprocess
+import platform
 from datetime import datetime
 from pyzabbix import ZabbixAPI
 from pysnmp.hlapi import (
@@ -110,20 +112,50 @@ def check_snmp_status(host, config):
         
         if error_indication:
             logging.debug(f"Host {host['host']} ({ip}): {error_indication}")
-            return False
+            return False, str(error_indication)
         elif error_status:
-            logging.debug(f"Host {host['host']} ({ip}): {error_status.prettyPrint()} at {var_binds[int(error_index)-1][0] if error_index else '?'}")
-            return False
+            error_msg = f"{error_status.prettyPrint()} at {var_binds[int(error_index)-1][0] if error_index else '?'}"
+            logging.debug(f"Host {host['host']} ({ip}): {error_msg}")
+            return False, error_msg
         else:
             logging.debug(f"Host {host['host']} ({ip}): SNMP OK")
-            return True
+            return True, ""
             
     except Exception as e:
         logging.error(f"Erro ao verificar status SNMP do host {host['host']} ({ip}): {e}")
+        return False, str(e)
+
+# Verifica se um host responde a ping
+def check_ping_status(host, config):
+    """Verifica se um host responde a ping"""
+    try:
+        ip = host["snmp_interface"]["ip"]
+        count = config.getint('ping', 'count', fallback=3)
+        timeout = config.getint('ping', 'timeout', fallback=2)
+        
+        # Comando de ping varia de acordo com o sistema operacional
+        param = '-n' if platform.system().lower() == 'windows' else '-c'
+        timeout_param = '-w' if platform.system().lower() == 'windows' else '-W'
+        
+        command = ['ping', param, str(count), timeout_param, str(timeout), ip]
+        
+        # Executa o ping
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        # Verifica o resultado
+        if result.returncode == 0:
+            logging.debug(f"Host {host['host']} ({ip}): PING OK")
+            return True
+        else:
+            logging.debug(f"Host {host['host']} ({ip}): PING falhou")
+            return False
+            
+    except Exception as e:
+        logging.error(f"Erro ao verificar status PING do host {host['host']} ({ip}): {e}")
         return False
 
 # Atualiza o status SNMP no Zabbix
-def update_host_snmp_status(zapi, host, status):
+def update_host_snmp_status(zapi, host, status, error_msg=""):
     """Atualiza o valor do item de status SNMP no Zabbix"""
     try:
         # Verifica se o item de status SNMP existe
@@ -148,9 +180,16 @@ def update_host_snmp_status(zapi, host, status):
                 "value": "1" if status else "0",
                 "ns": 0
             })
+            
+            # Atualiza a mensagem de erro se disponível
+            if not status and error_msg:
+                zapi.item.update(
+                    itemid=items[0]["itemid"],
+                    error=error_msg[:255]  # Limita ao tamanho máximo
+                )
         else:
             # Cria um novo item para status SNMP
-            zapi.item.create({
+            snmp_item = zapi.item.create({
                 "name": "SNMP Status",
                 "key_": "snmp.status",
                 "hostid": host["hostid"],
@@ -179,6 +218,13 @@ def update_host_snmp_status(zapi, host, status):
                     "value": "1" if status else "0",
                     "ns": 0
                 })
+                
+                # Atualiza a mensagem de erro se disponível
+                if not status and error_msg:
+                    zapi.item.update(
+                        itemid=items[0]["itemid"],
+                        error=error_msg[:255]  # Limita ao tamanho máximo
+                    )
                 
         return True
     except Exception as e:
@@ -211,20 +257,33 @@ def main():
             offline_hosts = []
             for host in hosts:
                 logger.debug(f"Verificando host {host['host']} ({host['snmp_interface']['ip']})")
-                status = check_snmp_status(host, config)
                 
+                # Verifica status SNMP
+                snmp_ok, error_msg = check_snmp_status(host, config)
+                
+                # Verifica status de ping se SNMP falhar
+                ping_ok = False
+                if not snmp_ok:
+                    ping_ok = check_ping_status(host, config)
+                    
                 # Atualiza status no Zabbix
-                update_host_snmp_status(zapi, host, status)
+                update_host_snmp_status(zapi, host, snmp_ok, error_msg)
                 
-                if not status:
-                    offline_hosts.append(host)
+                if not snmp_ok:
+                    offline_hosts.append({
+                        'host': host,
+                        'ping_ok': ping_ok,
+                        'error': error_msg
+                    })
             
             # Registra resultados
             logger.info(f"Verificação concluída. {len(offline_hosts)} dispositivos offline de {len(hosts)} total.")
             if offline_hosts:
                 logger.info("Dispositivos offline:")
-                for host in offline_hosts:
-                    logger.info(f"  - {host['name']} ({host['snmp_interface']['ip']})")
+                for item in offline_hosts:
+                    host = item['host']
+                    ping_status = "Responde a ping" if item['ping_ok'] else "Não responde a ping"
+                    logger.info(f"  - {host['name']} ({host['snmp_interface']['ip']}): {ping_status}, Erro: {item['error']}")
             
             # Calcula tempo para próxima execução
             execution_time = time.time() - start_time
